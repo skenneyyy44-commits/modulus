@@ -531,8 +531,13 @@ class Module(torch.nn.Module):
             return
 
         # Save the physicsnemo version and git hash (if available)
+        try:
+            physicsnemo_version = importlib.metadata.version("nvidia-physicsnemo")
+        except importlib.metadata.PackageNotFoundError:
+            physicsnemo_version = "unknown"
+
         metadata_info = {
-            "physicsnemo_version": importlib.metadata.version("nvidia-physicsnemo"),
+            "physicsnemo_version": physicsnemo_version,
             "mdlus_file_version": self.__model_checkpoint_version__,
         }
 
