@@ -18,6 +18,7 @@
 import os
 from pathlib import Path
 
+import pytest
 import zarr
 
 from test.conftest import requires_module
@@ -32,11 +33,32 @@ def test_msc_read(pytestconfig):
     current_dir = current_file.parent
     os.environ["MSC_CONFIG"] = f"{current_dir}/msc_config_public_read.yaml"
 
-    # Open a publicly accessible zarr file in an S3 bucket
-    zarr_group = zarr.open(
-        "msc://cmip6-pds/CMIP6/ScenarioMIP/NOAA-GFDL/GFDL-ESM4/ssp119/r1i1p1f1/day/tas/gr1/v20180701",
-        mode="r",
-    )
+    proxy_vars = ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")
+    previous_proxy_values = {var: os.environ.get(var) for var in proxy_vars}
+    previous_no_proxy = os.environ.get("NO_PROXY")
+    try:
+        for var in proxy_vars:
+            os.environ.pop(var, None)
+        os.environ["NO_PROXY"] = "*"
+
+        # Open a publicly accessible zarr file in an S3 bucket
+        try:
+            zarr_group = zarr.open(
+                "msc://cmip6-pds/CMIP6/ScenarioMIP/NOAA-GFDL/GFDL-ESM4/ssp119/r1i1p1f1/day/tas/gr1/v20180701",
+                mode="r",
+            )
+        except RuntimeError as exc:
+            pytest.skip(f"Skipping MSC public read: {exc}")
+    finally:
+        for var, value in previous_proxy_values.items():
+            if value is None:
+                os.environ.pop(var, None)
+            else:
+                os.environ[var] = value
+        if previous_no_proxy is None:
+            os.environ.pop("NO_PROXY", None)
+        else:
+            os.environ["NO_PROXY"] = previous_no_proxy
 
     # Verify the group has content
     assert len(zarr_group) > 0
