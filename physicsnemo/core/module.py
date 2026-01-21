@@ -36,6 +36,7 @@ import torch
 from physicsnemo.core.filesystem import _download_cached, _get_fs
 from physicsnemo.core.meta import ModelMetaData
 from physicsnemo.core.registry import ModelRegistry
+from physicsnemo.core.version_check import get_installed_version
 
 # Used for saving checkpoints of nested modules
 _BASE_CKPT_PREFIX = "__physicsnemo.Module__"
@@ -531,8 +532,11 @@ class Module(torch.nn.Module):
             return
 
         # Save the physicsnemo version and git hash (if available)
+        physicsnemo_version = (
+            get_installed_version("nvidia-physicsnemo") or "unknown"
+        )
         metadata_info = {
-            "physicsnemo_version": importlib.metadata.version("nvidia-physicsnemo"),
+            "physicsnemo_version": physicsnemo_version,
             "mdlus_file_version": self.__model_checkpoint_version__,
         }
 
