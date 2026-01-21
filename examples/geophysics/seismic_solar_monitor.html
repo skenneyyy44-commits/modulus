@@ -213,6 +213,8 @@
         const modeLabel = document.getElementById('mode-label');
 
         let activeTooltipId = null;
+        let tooltipHideTimeout = null;
+        let tooltipVisible = false;
 
         // Clock
         const updateClock = () => {
@@ -272,7 +274,15 @@
         }
 
         function showTooltip(event, data) {
-            tooltip.style.display = 'block';
+            if (tooltipHideTimeout) {
+                window.clearTimeout(tooltipHideTimeout);
+                tooltipHideTimeout = null;
+            }
+
+            if (!tooltipVisible) {
+                tooltip.style.display = 'block';
+                tooltipVisible = true;
+            }
             tooltip.style.opacity = '1';
 
             if (data?.eventId !== activeTooltipId) {
@@ -292,12 +302,17 @@
         }
 
         function hideTooltip() {
+            if (!tooltipVisible || tooltipHideTimeout) {
+                return;
+            }
             tooltip.style.opacity = '0';
             activeTooltipId = null;
-            window.setTimeout(() => {
+            tooltipHideTimeout = window.setTimeout(() => {
                 if (tooltip.style.opacity === '0') {
                     tooltip.style.display = 'none';
+                    tooltipVisible = false;
                 }
+                tooltipHideTimeout = null;
             }, 200);
         }
 
