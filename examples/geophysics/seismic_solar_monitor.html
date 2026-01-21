@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seismic & Solar Monitor 2026</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: white; }
+        #canvas-container { width: 100vw; height: 100vh; position: relative; background: radial-gradient(circle at center, #1a1a2e 0%, #000000 100%); }
+
+        /* UI Overlay */
+        #ui-layer {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin: 0;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            font-weight: 300;
+            border-left: 4px solid #f9cb28;
+            padding-left: 15px;
+            background: linear-gradient(90deg, #fff, #888);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-panel {
+            margin-top: 20px;
+            background: rgba(0, 5, 16, 0.85);
+            border: 1px solid #334466;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            max-width: 320px;
+            box-shadow: 0 0 20px rgba(0, 100, 255, 0.1);
+        }
+
+        .stat-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.85rem; align-items: center; }
+        .stat-label { color: #88aaff; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 1px; }
+        .stat-value { font-family: 'Courier New', monospace; font-weight: bold; }
+        .stat-value.danger { color: #ff3333; text-shadow: 0 0 5px #ff0000; }
+        .stat-value.warn { color: #ffaa00; text-shadow: 0 0 5px #ffaa00; }
+
+        /* Tooltip */
+        #tooltip {
+            position: absolute;
+            background: rgba(10, 20, 40, 0.95);
+            border: 1px solid #00aaff;
+            padding: 15px;
+            border-radius: 0px;
+            pointer-events: none;
+            display: none;
+            z-index: 30;
+            box-shadow: 0 0 20px rgba(0, 170, 255, 0.3);
+            transform: translate(20px, -20px);
+            transition: opacity 0.2s;
+            min-width: 200px;
+        }
+        #tooltip::before {
+            content: '';
+            position: absolute;
+            top: -5px; left: -5px; bottom: -5px; right: -5px;
+            border: 1px solid rgba(0, 170, 255, 0.3);
+            z-index: -1;
+        }
+        #tooltip h3 { margin: 0 0 8px 0; font-size: 1.1rem; color: #fff; border-bottom: 1px solid #333; padding-bottom: 5px; }
+        #tooltip p { margin: 3px 0; font-size: 0.8rem; color: #aaccff; font-family: 'Courier New', monospace; }
+
+        /* Loading */
+        #loading {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: #00aaff;
+            font-family: 'Courier New', monospace;
+            font-size: 1.2rem;
+            animation: blink 1s infinite;
+            z-index: 5;
+            text-align: center;
+        }
+
+        /* 2D Fallback Styles */
+        .map-container {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #000 url('https://unpkg.com/three-globe/example/img/earth-night.jpg') no-repeat center center;
+            background-size: cover;
+            display: none; /* Hidden by default */
+        }
+
+        .quake-marker-2d {
+            position: absolute;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.5);
+            animation: pulse-2d 2s infinite;
+        }
+        .quake-marker-2d::after {
+            content: '';
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 100%; height: 100%;
+            border-radius: 50%;
+            border: 1px solid currentColor;
+            transform: translate(-50%, -50%);
+            animation: ripple-2d 2s infinite;
+        }
+
+        .mode-indicator {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            color: #445566;
+            font-family: 'Courier New', monospace;
+            font-size: 0.7rem;
+            letter-spacing: 2px;
+        }
+
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @keyframes pulse-2d { 0% { transform: translate(-50%, -50%) scale(1); } 50% { transform: translate(-50%, -50%) scale(1.2); } 100% { transform: translate(-50%, -50%) scale(1); } }
+        @keyframes ripple-2d { 0% { width: 100%; height: 100%; opacity: 1; } 100% { width: 300%; height: 300%; opacity: 0; } }
+    </style>
+    <!-- Import Map to resolve 'three' bare module specifier -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <h1>Geophysical Monitor</h1>
+        <div class="status-panel">
+            <div class="stat-row">
+                <span class="stat-label">Solar Status</span>
+                <span class="stat-value danger">G4 (SEVERE)</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Solar Wind</span>
+                <span class="stat-value warn">1,720 km/s</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Seismic Alert</span>
+                <span class="stat-value">ELEVATED</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">System Time</span>
+                <span class="stat-value" id="sys-time">00:00:00 UTC</span>
+            </div>
+            <div style="margin-top: 15px; height: 2px; background: linear-gradient(90deg, #ff4d4d, transparent); width: 100%;"></div>
+            <p style="font-size: 0.7rem; color: #88aaff; margin-top: 10px; font-family: 'Courier New', monospace;">
+                >> ANALYZING CORRELATION: SOLAR FLUX VS CRUSTAL STRESS<br>
+                >> DATA SOURCE: GLOBAL SEISMOGRAPHIC NETWORK
+            </p>
+        </div>
+    </div>
+
+    <div id="tooltip"></div>
+    <div id="loading">>> INITIALIZING HOLOGRAPHIC SUBSYSTEM...</div>
+    <div id="canvas-container">
+        <div id="fallback-map" class="map-container"></div>
+        <div id="mode-label" class="mode-indicator"></div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- Configuration ---
+        const SCENE_CONFIG = {
+            earthRadius: 5,
+            rotationSpeed: 0.0003,
+            colorPalette: {
+                high: 0xff3333,
+                med: 0xffaa00,
+                low: 0x00ccff,
+                beam: 0xffffff
+            }
+        };
+
+        // --- Data: Recent Earthquakes (Jan 2026) ---
+        const quakeData = [
+            { loc: "Bandon, Oregon", lat: 43.1, lon: -124.4, mag: 6.0, date: "Jan 16", desc: "Cascadia Subduction Zone" },
+            { loc: "Indio, California", lat: 33.7, lon: -116.2, mag: 4.9, date: "Jan 20", desc: "San Andreas Fault" },
+            { loc: "Ohlman, Illinois", lat: 39.3, lon: -89.2, mag: 3.8, date: "Jan 20", desc: "Intraplate Anomaly" },
+            { loc: "Tobelo, Indonesia", lat: 1.7, lon: 128.0, mag: 6.4, date: "Jan 10", desc: "Halmahera Arc" },
+            { loc: "Rancho Viejo, Mexico", lat: 23.0, lon: -110.0, mag: 6.5, date: "Jan 02", desc: "Baja Peninsula" },
+            { loc: "Ferndale, California", lat: 40.5, lon: -124.2, mag: 5.2, date: "Jan 19", desc: "Mendocino Triple Junction" },
+            { loc: "Nevada, USA", lat: 38.0, lon: -117.0, mag: 5.0, date: "Jan 20", desc: "Walker Lane" },
+            { loc: "South Sandwich Is.", lat: -56.0, lon: -27.0, mag: 5.1, date: "Jan 18", desc: "Remote Activity" },
+            { loc: "Fiji Region", lat: -18.0, lon: 178.0, mag: 4.8, date: "Jan 19", desc: "Deep Focus" },
+            { loc: "Reykjanes, Iceland", lat: 63.9, lon: -22.3, mag: 4.2, date: "Jan 17", desc: "Magmatic Movement" }
+        ].map((quake) => {
+            const depthKm = Math.floor(Math.random() * 40 + 5);
+            const eventId = Math.floor(Math.random() * 9000) + 1000;
+            const energyGj = (Math.pow(10, (1.5 * quake.mag + 4.8)) / 1e9).toFixed(2);
+            return { ...quake, depthKm, eventId, energyGj };
+        });
+
+        const container = document.getElementById('canvas-container');
+        const tooltip = document.getElementById('tooltip');
+        const loading = document.getElementById('loading');
+        const modeLabel = document.getElementById('mode-label');
+
+        let activeTooltipId = null;
+        let tooltipHideTimeout = null;
+        let tooltipVisible = false;
+
+        // Clock
+        const updateClock = () => {
+            const now = new Date();
+            document.getElementById('sys-time').innerText = now.toISOString().split('T')[1].split('.')[0] + " UTC";
+        };
+        updateClock();
+        setInterval(updateClock, 1000);
+
+        // --- Initialization Logic ---
+        function init() {
+            try {
+                const testCanvas = document.createElement('canvas');
+                const gl = testCanvas.getContext('webgl') || testCanvas.getContext('experimental-webgl');
+                if (!gl) throw new Error("WebGL not supported");
+
+                init3D();
+                modeLabel.innerText = "MODE: 3D HOLOGRAPHIC RENDERER";
+            } catch (e) {
+                console.warn("WebGL initialization failed, switching to 2D Fallback:", e);
+                init2D();
+                modeLabel.innerText = "MODE: 2D TACTILE (FALLBACK)";
+            }
+        }
+
+        // --- 2D Fallback Mode ---
+        function init2D() {
+            loading.style.display = 'none';
+            const mapDiv = document.getElementById('fallback-map');
+            mapDiv.style.display = 'block';
+
+            quakeData.forEach(quake => {
+                const el = document.createElement('div');
+                el.className = 'quake-marker-2d';
+
+                const x = (quake.lon + 180) / 360 * 100;
+                const y = (90 - quake.lat) / 180 * 100;
+
+                el.style.left = `${x}%`;
+                el.style.top = `${y}%`;
+
+                // Size relative to mag
+                const size = quake.mag * 2;
+                el.style.width = `${size}px`;
+                el.style.height = `${size}px`;
+
+                const color = quake.mag >= 6.0 ? '#ff3333' : (quake.mag >= 5.0 ? '#ffaa00' : '#00ccff');
+                el.style.borderColor = color;
+                el.style.color = color;
+                el.style.backgroundColor = 'rgba(0,0,0,0.5)';
+
+                el.addEventListener('mouseenter', (e) => showTooltip(e, quake));
+                el.addEventListener('mouseleave', hideTooltip);
+
+                mapDiv.appendChild(el);
+            });
+        }
+
+        function showTooltip(event, data) {
+            if (tooltipHideTimeout) {
+                window.clearTimeout(tooltipHideTimeout);
+                tooltipHideTimeout = null;
+            }
+
+            if (!tooltipVisible) {
+                tooltip.style.display = 'block';
+                tooltipVisible = true;
+            }
+            tooltip.style.opacity = '1';
+
+            if (data?.eventId !== activeTooltipId) {
+                activeTooltipId = data?.eventId ?? null;
+                tooltip.innerHTML = `
+                    <h3>M ${data.mag.toFixed(1)} <span style="font-size:0.7em; color:#888;">// EVENT_ID: ${data.eventId}</span></h3>
+                    <p>>> LOC: ${data.loc.toUpperCase()}</p>
+                    <p>>> DATE: ${data.date.toUpperCase()}</p>
+                    <p>>> CLASS: ${data.desc.toUpperCase()}</p>
+                    <div style="margin-top:5px; padding-top:5px; border-top:1px dashed #444; color: #88aaff;">
+                        <p>LAT: ${data.lat.toFixed(2)} / LON: ${data.lon.toFixed(2)}</p>
+                        <p>DEPTH: ${data.depthKm} KM / ENERGY: ${data.energyGj} GJ</p>
+                    </div>
+                `;
+            }
+            updateTooltipPos(event);
+        }
+
+        function hideTooltip() {
+            if (!tooltipVisible || tooltipHideTimeout) {
+                return;
+            }
+            tooltip.style.opacity = '0';
+            activeTooltipId = null;
+            tooltipHideTimeout = window.setTimeout(() => {
+                if (tooltip.style.opacity === '0') {
+                    tooltip.style.display = 'none';
+                    tooltipVisible = false;
+                }
+                tooltipHideTimeout = null;
+            }, 200);
+        }
+
+        function updateTooltipPos(event) {
+            const xOffset = 20;
+            const yOffset = 20;
+            let left = event.clientX + xOffset;
+            let top = event.clientY - yOffset;
+
+            // Boundary check
+            if (left + 220 > window.innerWidth) left = event.clientX - 240;
+
+            tooltip.style.left = left + 'px';
+            tooltip.style.top = top + 'px';
+        }
+
+        // --- 3D Mode ---
+        function init3D() {
+            const scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x000000, 0.03);
+
+            const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(14, 8, 14);
+
+            let renderer;
+            try {
+                renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            } catch (err) { throw err; }
+
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            // Tone mapping for glow effect simulation
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            container.appendChild(renderer.domElement);
+
+            const controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.autoRotate = true;
+            controls.autoRotateSpeed = 0.5;
+            controls.minDistance = 7;
+            controls.maxDistance = 30;
+
+            // --- Starfield ---
+            const starGeo = new THREE.BufferGeometry();
+            const starCount = 2000;
+            const starPos = new Float32Array(starCount * 3);
+            for(let i=0; i<starCount*3; i++) {
+                starPos[i] = (Math.random() - 0.5) * 200;
+            }
+            starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+            const starMat = new THREE.PointsMaterial({color: 0xffffff, size: 0.15, transparent: true, opacity: 0.8});
+            const stars = new THREE.Points(starGeo, starMat);
+            scene.add(stars);
+
+            // --- Lighting ---
+            const ambientLight = new THREE.AmbientLight(0x404040); // Soft white light
+            scene.add(ambientLight);
+
+            const sunLight = new THREE.DirectionalLight(0xffffff, 2.5);
+            sunLight.position.set(30, 10, 20);
+            scene.add(sunLight);
+
+            // Backlight for edge definition
+            const backLight = new THREE.DirectionalLight(0x0044ff, 1.5);
+            backLight.position.set(-20, 5, -10);
+            scene.add(backLight);
+
+            // --- Earth Construction ---
+            const earthGroup = new THREE.Group();
+            scene.add(earthGroup);
+
+            const textureLoader = new THREE.TextureLoader();
+
+            // 1. Base Earth
+            const earthGeo = new THREE.SphereGeometry(SCENE_CONFIG.earthRadius, 64, 64);
+            const earthMat = new THREE.MeshPhongMaterial({
+                color: 0x222222,
+                emissive: 0x000510,
+                specular: 0x111111,
+                shininess: 10,
+                map: textureLoader.load('https://unpkg.com/three-globe/example/img/earth-night.jpg',
+                    () => { loading.style.display = 'none'; },
+                    undefined,
+                    () => { loading.style.display = 'none'; }
+                ),
+                bumpMap: textureLoader.load('https://unpkg.com/three-globe/example/img/earth-topology.png'),
+                bumpScale: 0.15
+            });
+            const earth = new THREE.Mesh(earthGeo, earthMat);
+            earthGroup.add(earth);
+
+            // 2. Holographic Grid Overlay
+            const gridGeo = new THREE.WireframeGeometry(new THREE.SphereGeometry(SCENE_CONFIG.earthRadius + 0.05, 32, 32));
+            const gridMat = new THREE.LineBasicMaterial({ color: 0x0066aa, transparent: true, opacity: 0.1 });
+            const grid = new THREE.LineSegments(gridGeo, gridMat);
+            earthGroup.add(grid);
+
+            // 3. Atmosphere Halo
+            const atmosGeo = new THREE.SphereGeometry(SCENE_CONFIG.earthRadius + 0.2, 64, 64);
+            const atmosMat = new THREE.MeshPhongMaterial({
+                color: 0x0088ff,
+                transparent: true,
+                opacity: 0.1,
+                side: THREE.BackSide,
+                blending: THREE.AdditiveBlending,
+            });
+            const atmosphere = new THREE.Mesh(atmosGeo, atmosMat);
+            earthGroup.add(atmosphere);
+
+            // --- Markers & Visuals ---
+            function latLonToVector3(lat, lon, radius) {
+                const phi = (90 - lat) * (Math.PI / 180);
+                const theta = (lon + 180) * (Math.PI / 180);
+                const adjustedTheta = theta - (Math.PI / 2);
+                const x = -(radius * Math.sin(phi) * Math.cos(adjustedTheta));
+                const z = (radius * Math.sin(phi) * Math.sin(adjustedTheta));
+                const y = (radius * Math.cos(phi));
+                return new THREE.Vector3(x, y, z);
+            }
+
+            const markers = [];
+            const shockwaves = []; // To animate
+
+            quakeData.forEach(quake => {
+                const height = Math.max(0.5, (quake.mag - 3) * 0.5);
+                const hexColor = quake.mag >= 6.0 ? SCENE_CONFIG.colorPalette.high : (quake.mag >= 5.0 ? SCENE_CONFIG.colorPalette.med : SCENE_CONFIG.colorPalette.low);
+
+                // 1. Beacon (Laser)
+                const geometry = new THREE.CylinderGeometry(0.04, 0.01, height, 8);
+                geometry.translate(0, height / 2, 0);
+                const material = new THREE.MeshBasicMaterial({ color: hexColor, blending: THREE.AdditiveBlending });
+                const mesh = new THREE.Mesh(geometry, material);
+
+                const position = latLonToVector3(quake.lat, quake.lon, SCENE_CONFIG.earthRadius);
+                mesh.position.copy(position);
+                mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), position.clone().normalize());
+                mesh.userData = quake;
+
+                earthGroup.add(mesh);
+                markers.push(mesh);
+
+                // 2. Shockwave (Animated Ring)
+                const waveGeo = new THREE.RingGeometry(0.1, 0.2, 32);
+                const waveMat = new THREE.MeshBasicMaterial({
+                    color: hexColor,
+                    side: THREE.DoubleSide,
+                    transparent: true,
+                    opacity: 0.8,
+                    blending: THREE.AdditiveBlending
+                });
+                const wave = new THREE.Mesh(waveGeo, waveMat);
+                wave.position.copy(position);
+                wave.lookAt(new THREE.Vector3(0,0,0));
+                wave.position.setLength(SCENE_CONFIG.earthRadius + 0.03); // Just above surface
+
+                // Add custom properties for animation
+                wave.userData = {
+                    maxScale: 2 + (quake.mag * 0.5),
+                    speed: 0.01 + (quake.mag * 0.005),
+                    currentScale: 1
+                };
+
+                earthGroup.add(wave);
+                shockwaves.push(wave);
+
+                // 3. Base Dot
+                const dotGeo = new THREE.CircleGeometry(0.15, 16);
+                const dotMat = new THREE.MeshBasicMaterial({ color: hexColor });
+                const dot = new THREE.Mesh(dotGeo, dotMat);
+                dot.position.copy(position);
+                dot.lookAt(new THREE.Vector3(0,0,0));
+                dot.position.setLength(SCENE_CONFIG.earthRadius + 0.02);
+                earthGroup.add(dot);
+            });
+
+            // --- Solar Wind (Streaks) ---
+            // Using LineSegments for a "warp speed" look
+            const streakCount = 200;
+            const streakGeo = new THREE.BufferGeometry();
+            const streakPos = [];
+            const streakSpeeds = [];
+
+            for(let i = 0; i < streakCount; i++) {
+                // Random position in a box to the right
+                const x = 20 + Math.random() * 20;
+                const y = (Math.random() - 0.5) * 30;
+                const z = (Math.random() - 0.5) * 30;
+                const len = 0.5 + Math.random() * 2;
+
+                streakPos.push(x, y, z);
+                streakPos.push(x + len, y, z); // Tail
+
+                streakSpeeds.push(0.3 + Math.random() * 0.5);
+            }
+
+            streakGeo.setAttribute('position', new THREE.Float32BufferAttribute(streakPos, 3));
+            const streakMat = new THREE.LineBasicMaterial({
+                color: 0xffdd44,
+                transparent: true,
+                opacity: 0.4,
+                blending: THREE.AdditiveBlending
+            });
+            const solarStreaks = new THREE.LineSegments(streakGeo, streakMat);
+            scene.add(solarStreaks);
+
+            // --- Raycaster ---
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2();
+
+            function onMouseMove(event) {
+                mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+                updateTooltipPos(event);
+            }
+            window.addEventListener('mousemove', onMouseMove);
+
+            // --- Animation Loop ---
+            function animate() {
+                requestAnimationFrame(animate);
+
+                controls.update();
+
+                // Rotate Earth (already handled by autoRotate, but we can do manual if needed)
+                // earthGroup.rotation.y += SCENE_CONFIG.rotationSpeed;
+
+                // Animate Shockwaves
+                shockwaves.forEach(wave => {
+                    wave.userData.currentScale += wave.userData.speed;
+                    wave.scale.set(wave.userData.currentScale, wave.userData.currentScale, 1);
+
+                    // Fade out
+                    const progress = wave.userData.currentScale / wave.userData.maxScale;
+                    wave.material.opacity = 0.8 * (1 - progress);
+
+                    // Reset
+                    if(wave.userData.currentScale >= wave.userData.maxScale) {
+                        wave.userData.currentScale = 1;
+                        wave.material.opacity = 0.8;
+                    }
+                });
+
+                // Animate Solar Streaks
+                const positions = solarStreaks.geometry.attributes.position.array;
+                for(let i = 0; i < streakCount; i++) {
+                    const speed = streakSpeeds[i];
+                    // Head index: i*6, Tail index: i*6+3
+                    positions[i*6] -= speed;     // Head X
+                    positions[i*6+3] -= speed;   // Tail X
+
+                    // Reset if too far left
+                    if(positions[i*6] < -20) {
+                        const resetX = 20 + Math.random() * 10;
+                        const len = Math.abs(positions[i*6+3] - positions[i*6]); // Keep length
+                        positions[i*6] = resetX;
+                        positions[i*6+3] = resetX + len;
+
+                        // Randomize Y/Z again for variation
+                        const newY = (Math.random() - 0.5) * 30;
+                        const newZ = (Math.random() - 0.5) * 30;
+                        positions[i*6+1] = newY; positions[i*6+2] = newZ;
+                        positions[i*6+4] = newY; positions[i*6+5] = newZ;
+                    }
+                }
+                solarStreaks.geometry.attributes.position.needsUpdate = true;
+
+                // Raycasting
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(markers);
+
+                if (intersects.length > 0) {
+                    const object = intersects[0].object;
+                    const data = object.userData;
+                    document.body.style.cursor = 'pointer';
+                    object.material.color.setHex(0xffffff); // Highlight white
+                    showTooltip({ clientX: (mouse.x + 1)/2 * window.innerWidth, clientY: -(mouse.y - 1)/2 * window.innerHeight }, data);
+                    controls.autoRotate = false; // Pause rotation on hover
+                } else {
+                    document.body.style.cursor = 'default';
+                    hideTooltip();
+                    controls.autoRotate = true; // Resume
+                    markers.forEach(m => {
+                        const originalColor = m.userData.mag >= 6.0 ? SCENE_CONFIG.colorPalette.high : (m.userData.mag >= 5.0 ? SCENE_CONFIG.colorPalette.med : SCENE_CONFIG.colorPalette.low);
+                        m.material.color.setHex(originalColor);
+                    });
+                }
+
+                renderer.render(scene, camera);
+            }
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            animate();
+        }
+
+        // Start
+        init();
+
+    </script>
+</body>
+</html>
