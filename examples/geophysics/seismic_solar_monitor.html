@@ -139,18 +139,19 @@
 <body>
 
     <div id="ui-layer">
-        <h1>Geophysical Monitor</h1>
+        <h1>Geophysical Illustration</h1>
+        <p style="color:#ffdd77; font-weight:bold; max-width:320px;">SIMULATION — NOT LIVE DATA. Illustrative earthquake entries and solar conditions; not an alert or scientific analysis.</p>
         <div class="status-panel">
             <div class="stat-row">
-                <span class="stat-label">Solar Status</span>
+                <span class="stat-label">Example Solar Status</span>
                 <span class="stat-value danger">G4 (SEVERE)</span>
             </div>
             <div class="stat-row">
-                <span class="stat-label">Solar Wind</span>
+                <span class="stat-label">Example Solar Wind</span>
                 <span class="stat-value warn">1,720 km/s</span>
             </div>
             <div class="stat-row">
-                <span class="stat-label">Seismic Alert</span>
+                <span class="stat-label">Example Seismic Level</span>
                 <span class="stat-value">ELEVATED</span>
             </div>
             <div class="stat-row">
@@ -159,8 +160,8 @@
             </div>
             <div style="margin-top: 15px; height: 2px; background: linear-gradient(90deg, #ff4d4d, transparent); width: 100%;"></div>
             <p style="font-size: 0.7rem; color: #88aaff; margin-top: 10px; font-family: 'Courier New', monospace;">
-                >> ANALYZING CORRELATION: SOLAR FLUX VS CRUSTAL STRESS<br>
-                >> DATA SOURCE: GLOBAL SEISMOGRAPHIC NETWORK
+                >> DISPLAY: ILLUSTRATIVE SCENARIO<br>
+                >> NO LIVE DATA OR CORRELATION ANALYSIS
             </p>
         </div>
     </div>
@@ -188,7 +189,7 @@
             }
         };
 
-        // --- Data: Recent Earthquakes (Jan 2026) ---
+        // Illustrative, unverified earthquake examples; not a live feed.
         const quakeData = [
             { loc: "Bandon, Oregon", lat: 43.1, lon: -124.4, mag: 6.0, date: "Jan 16", desc: "Cascadia Subduction Zone" },
             { loc: "Indio, California", lat: 33.7, lon: -116.2, mag: 4.9, date: "Jan 20", desc: "San Andreas Fault" },
@@ -200,11 +201,10 @@
             { loc: "South Sandwich Is.", lat: -56.0, lon: -27.0, mag: 5.1, date: "Jan 18", desc: "Remote Activity" },
             { loc: "Fiji Region", lat: -18.0, lon: 178.0, mag: 4.8, date: "Jan 19", desc: "Deep Focus" },
             { loc: "Reykjanes, Iceland", lat: 63.9, lon: -22.3, mag: 4.2, date: "Jan 17", desc: "Magmatic Movement" }
-        ].map((quake) => {
-            const depthKm = Math.floor(Math.random() * 40 + 5);
-            const eventId = Math.floor(Math.random() * 9000) + 1000;
+        ].map((quake, index) => {
+            const eventId = `EXAMPLE-${index + 1}`;
             const energyGj = (Math.pow(10, (1.5 * quake.mag + 4.8)) / 1e9).toFixed(2);
-            return { ...quake, depthKm, eventId, energyGj };
+            return { ...quake, eventId, energyGj };
         });
 
         const container = document.getElementById('canvas-container');
@@ -290,11 +290,11 @@
                 tooltip.innerHTML = `
                     <h3>M ${data.mag.toFixed(1)} <span style="font-size:0.7em; color:#888;">// EVENT_ID: ${data.eventId}</span></h3>
                     <p>>> LOC: ${data.loc.toUpperCase()}</p>
-                    <p>>> DATE: ${data.date.toUpperCase()}</p>
+                    <p>&gt;&gt; EXAMPLE DATE: ${data.date.toUpperCase()}</p>
                     <p>>> CLASS: ${data.desc.toUpperCase()}</p>
                     <div style="margin-top:5px; padding-top:5px; border-top:1px dashed #444; color: #88aaff;">
                         <p>LAT: ${data.lat.toFixed(2)} / LON: ${data.lon.toFixed(2)}</p>
-                        <p>DEPTH: ${data.depthKm} KM / ENERGY: ${data.energyGj} GJ</p>
+                        <p>ESTIMATED ENERGY FROM EXAMPLE MAGNITUDE: ${data.energyGj} GJ</p>
                     </div>
                 `;
             }
