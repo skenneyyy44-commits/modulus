@@ -88,9 +88,23 @@
         .map-container {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: #000 url('https://unpkg.com/three-globe/example/img/earth-night.jpg') no-repeat center center;
-            background-size: cover;
+            overflow: hidden;
+            background: #000;
             display: none; /* Hidden by default */
+            container-type: size;
+        }
+
+        /* Same 2:1 equirectangular frame as earth-night.jpg (4096×2048),
+           scaled with cover and centered so marker percentages share its coordinates. */
+        .map-surface {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: max(100cqw, 200cqh);
+            height: max(100cqh, 50cqw);
+            transform: translate(-50%, -50%);
+            background: #000 url('https://unpkg.com/three-globe/example/img/earth-night.jpg') no-repeat center center;
+            background-size: 100% 100%;
         }
 
         .quake-marker-2d {
@@ -169,7 +183,9 @@
     <div id="tooltip"></div>
     <div id="loading">>> INITIALIZING HOLOGRAPHIC SUBSYSTEM...</div>
     <div id="canvas-container">
-        <div id="fallback-map" class="map-container"></div>
+        <div id="fallback-map" class="map-container">
+            <div id="map-surface" class="map-surface"></div>
+        </div>
         <div id="mode-label" class="mode-indicator"></div>
     </div>
 
@@ -244,12 +260,14 @@
         function init2D() {
             loading.style.display = 'none';
             const mapDiv = document.getElementById('fallback-map');
+            const mapSurface = document.getElementById('map-surface');
             mapDiv.style.display = 'block';
 
             quakeData.forEach(quake => {
                 const el = document.createElement('div');
                 el.className = 'quake-marker-2d';
 
+                // Percentages of the 2:1 map surface, not the cropped viewport.
                 const x = (quake.lon + 180) / 360 * 100;
                 const y = (90 - quake.lat) / 180 * 100;
 
@@ -269,7 +287,7 @@
                 el.addEventListener('mouseenter', (e) => showTooltip(e, quake));
                 el.addEventListener('mouseleave', hideTooltip);
 
-                mapDiv.appendChild(el);
+                mapSurface.appendChild(el);
             });
         }
 
@@ -424,13 +442,14 @@
             earthGroup.add(atmosphere);
 
             // --- Markers & Visuals ---
+            // Matches an unrotated SphereGeometry equirectangular map:
+            // u = 0 at lon -180°, u = 0.5 at the prime meridian.
             function latLonToVector3(lat, lon, radius) {
                 const phi = (90 - lat) * (Math.PI / 180);
                 const theta = (lon + 180) * (Math.PI / 180);
-                const adjustedTheta = theta - (Math.PI / 2);
-                const x = -(radius * Math.sin(phi) * Math.cos(adjustedTheta));
-                const z = (radius * Math.sin(phi) * Math.sin(adjustedTheta));
-                const y = (radius * Math.cos(phi));
+                const x = -(radius * Math.sin(phi) * Math.cos(theta));
+                const z = radius * Math.sin(phi) * Math.sin(theta);
+                const y = radius * Math.cos(phi);
                 return new THREE.Vector3(x, y, z);
             }
 
@@ -579,12 +598,18 @@
                 }
                 solarStreaks.geometry.attributes.position.needsUpdate = true;
 
-                // Raycasting
+                // Raycasting. Hits are sorted nearest-first; the Earth surface
+                // occludes markers on the far side of the globe.
                 raycaster.setFromCamera(mouse, camera);
-                const intersects = raycaster.intersectObjects(markers);
+                const intersects = raycaster.intersectObjects([earth, ...markers]);
+                let object = null;
+                for (const hit of intersects) {
+                    if (hit.object === earth) break;
+                    object = hit.object;
+                    break;
+                }
 
-                if (intersects.length > 0) {
-                    const object = intersects[0].object;
+                if (object) {
                     const data = object.userData;
                     document.body.style.cursor = 'pointer';
                     object.material.color.setHex(0xffffff); // Highlight white
