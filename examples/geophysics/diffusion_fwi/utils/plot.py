@@ -14,15 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from pathlib import Path
 from typing import Dict, List
 
-import torch
-
-import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib import gridspec
+import numpy as np
+import torch
 import wandb
-from pathlib import Path
+from matplotlib import gridspec
 
 
 def plot_prediction(
@@ -96,6 +95,8 @@ def plot_prediction(
         else np.linspace(0, nb_sources - 1, sources_to_plot, dtype=int).tolist()
     )
 
+    save_dpi = 300
+
     if len(source_indices) > 0:
         fig1 = plt.figure(figsize=(3 * len(source_indices), 6))
         gs = gridspec.GridSpec(
@@ -123,7 +124,7 @@ def plot_prediction(
             ax.set_yticks([])
 
         inputs_path = Path(save_dir) / "inputs.png"
-        fig1.savefig(inputs_path)
+        fig1.savefig(inputs_path, dpi=save_dpi, bbox_inches="tight")
 
         wandb.log({f"sample_{sample_idx}/inputs": wandb.Image(str(inputs_path))})
 
@@ -176,7 +177,7 @@ def plot_prediction(
     )
 
     predictions_path = Path(save_dir) / "predictions.png"
-    fig2.savefig(predictions_path)
+    fig2.savefig(predictions_path, dpi=save_dpi, bbox_inches="tight")
     wandb.log({f"sample_{sample_idx}/predictions": wandb.Image(str(predictions_path))})
 
     plt.close(fig2)
@@ -213,7 +214,7 @@ def plot_prediction(
 
     fig3.tight_layout()
     ensemble_variance_path = Path(save_dir) / "ensemble_variance.png"
-    fig3.savefig(ensemble_variance_path)
+    fig3.savefig(ensemble_variance_path, dpi=save_dpi, bbox_inches="tight")
     wandb.log(
         {
             f"sample_{sample_idx}/ensemble_variance": wandb.Image(
