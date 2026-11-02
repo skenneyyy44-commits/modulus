@@ -2,10 +2,32 @@ stages:
   - test
 
 include:
-
+  # The mirror cannot access the upstream CI template project.
   - project: 'modulus/modulus-ci'
     ref: main
     file: '.gitlab-ci/physicsnemo/security.gitlab-ci.yml'
+    rules:
+      - if: '$CI_PROJECT_PATH != "this-ottt-group/modulus"'
   - project: 'modulus/modulus-ci'
     ref: main
     file: '.gitlab-ci/physicsnemo/multigpu.gitlab-ci.yml'
+    rules:
+      - if: '$CI_PROJECT_PATH != "this-ottt-group/modulus"'
+
+# CPU checks for this mirror; upstream security and multi-GPU coverage still
+# requires the upstream templates and runners and is not provided by this job.
+mirror-core-tests:
+  stage: test
+  image: python:3.12
+  rules:
+    - if: '$CI_PROJECT_PATH == "this-ottt-group/modulus"'
+  before_script:
+    - python -m pip install --upgrade pip
+    - python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+    - python -m pip install -e . pytest
+  script:
+    - python -m pytest -q test/core/test_version_check.py test/core/test_module_nested.py --junitxml=core-tests.xml
+  artifacts:
+    when: always
+    reports:
+      junit: core-tests.xml
