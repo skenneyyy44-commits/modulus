@@ -611,7 +611,7 @@ class Module(torch.nn.Module):
                         tar.add(str(file), arcname=file.name)
 
                 # Upload to final destination
-                fs.put(local_path / "model.tar", file_name)
+                fs.put(str(local_path / "model.tar"), file_name)
 
     @staticmethod
     def _detect_checkpoint_format(file_path: str) -> str:

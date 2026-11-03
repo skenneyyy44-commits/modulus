@@ -15,7 +15,6 @@
 # limitations under the License.
 
 
-import os
 from pathlib import Path
 
 import pytest
@@ -27,38 +26,20 @@ from test.conftest import requires_module
 # Verifies that a Zarr file in a publicly accessible S3 bucket can be read using MSC (Multi-Storage Client).
 # See the [Multi-Storage Client README](/examples/multi_storage_client/README.md) for further information.
 @requires_module(["multistorageclient"])
-def test_msc_read(pytestconfig):
+def test_msc_read(pytestconfig, monkeypatch):
     # Point at the MSC config file which specifies access information for the S3 bucket
     current_file = Path(__file__).resolve()
     current_dir = current_file.parent
-    os.environ["MSC_CONFIG"] = f"{current_dir}/msc_config_public_read.yaml"
+    monkeypatch.setenv("MSC_CONFIG", f"{current_dir}/msc_config_public_read.yaml")
 
-    proxy_vars = ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")
-    previous_proxy_values = {var: os.environ.get(var) for var in proxy_vars}
-    previous_no_proxy = os.environ.get("NO_PROXY")
+    # Respect the runner's proxy configuration instead of forcing direct access.
     try:
-        for var in proxy_vars:
-            os.environ.pop(var, None)
-        os.environ["NO_PROXY"] = "*"
-
-        # Open a publicly accessible zarr file in an S3 bucket
-        try:
-            zarr_group = zarr.open(
-                "msc://cmip6-pds/CMIP6/ScenarioMIP/NOAA-GFDL/GFDL-ESM4/ssp119/r1i1p1f1/day/tas/gr1/v20180701",
-                mode="r",
-            )
-        except RuntimeError as exc:
-            pytest.skip(f"Skipping MSC public read: {exc}")
-    finally:
-        for var, value in previous_proxy_values.items():
-            if value is None:
-                os.environ.pop(var, None)
-            else:
-                os.environ[var] = value
-        if previous_no_proxy is None:
-            os.environ.pop("NO_PROXY", None)
-        else:
-            os.environ["NO_PROXY"] = previous_no_proxy
+        zarr_group = zarr.open(
+            "msc://cmip6-pds/CMIP6/ScenarioMIP/NOAA-GFDL/GFDL-ESM4/ssp119/r1i1p1f1/day/tas/gr1/v20180701",
+            mode="r",
+        )
+    except RuntimeError as exc:
+        pytest.skip(f"Skipping MSC public read: {exc}")
 
     # Verify the group has content
     assert len(zarr_group) > 0

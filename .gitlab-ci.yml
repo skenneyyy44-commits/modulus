@@ -1,11 +1,37 @@
+# Self-contained validation for the GitHub mirror. NVIDIA's private CI includes
+# are unavailable to this fork; GPU/security validation is not covered here.
 stages:
   - test
 
-include:
+checkpoint-cpu:
+  stage: test
+  image: python:3.12-slim
+  variables:
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  before_script:
+    - python -m pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+    - python -m pip install pytest packaging numpy fsspec s3fs requests tqdm
+  script:
+    - python -m pytest test/core/test_checkpoint_metadata.py test/core/test_version_check.py test/core/test_module_nested.py -q --junitxml=checkpoint-results.xml
+  artifacts:
+    when: always
+    reports:
+      junit: checkpoint-results.xml
 
-  - project: 'modulus/modulus-ci'
-    ref: main
-    file: '.gitlab-ci/physicsnemo/security.gitlab-ci.yml'
-  - project: 'modulus/modulus-ci'
-    ref: main
-    file: '.gitlab-ci/physicsnemo/multigpu.gitlab-ci.yml'
+# External availability is checked separately and never presented as offline
+# checkpoint coverage. Trigger explicitly when S3 access is available.
+msc-public-read:
+  stage: test
+  image: python:3.12-slim
+  when: manual
+  allow_failure: true
+  timeout: 5m
+  before_script:
+    - python -m pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+    - python -m pip install pytest packaging numpy fsspec s3fs requests tqdm 'zarr<3' 'multi-storage-client[boto3]'
+  script:
+    - python -m pytest test/utils/test_msc_public_read.py::test_msc_read -q -rs --fail-on-missing-modules --junitxml=msc-results.xml
+  artifacts:
+    when: always
+    reports:
+      junit: msc-results.xml
